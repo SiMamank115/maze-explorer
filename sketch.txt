@@ -1,0 +1,12 @@
+player in mid, map go around when player move. animations. map gen. const player and map? wrap in Game. menu. 
+
+core : map, player, cam. wrap in Game
+
+player move in .1 seconds delay, cam move .2 seconds with ease. map and player have no render function. all rendering go in cam, cam calculate the output position of map and the player.
+
+Route :
+1. Game
+2. Player
+3. Cam
+4. Map
+5. Addons
