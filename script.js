@@ -1,5 +1,15 @@
 let game;
 let currentFPS = 0;
+let rgb = {
+	r: 255,
+	g: 0,
+	b: 0,
+};
+function rgbAnimate() {
+	let state = [rgb.r == 255, rgb.g == 255, rgb.b == 255];
+	if (!_.includes(state, true)) return;
+	gsap.to(rgb, { r: state[2] ? 255 : 0, g: state[0] ? 255 : 0, b: state[1] ? 255 : 0, duration: 1 });
+}
 function preload() {}
 
 function setup() {
@@ -45,7 +55,7 @@ function keyReleased() {
 
 class Game {
 	constructor() {
-		this.res = 48;
+		this.res = 32;
 		this.radius = (this.res > 64 ? 4 : this.res >= 48 ? 8 : this.res >= 32 ? 12 : this.res >= 16 ? 16 : this.res >= 8 ? 32 : 64) + 1;
 		this.map = new Map(this.res);
 		this.player = new Player({ res: this.res, tile: _.filter(_.flatten(this.map.tiles), { center: true }) });
@@ -65,7 +75,7 @@ class Camera {
 	}
 	render(playerInstance, mapInstance) {
 		if (game.state == "preparation" && frameCount % 5 == 0) {
-			// mapInstance.generate();
+			mapInstance.generate();
 		}
 		if (
 			frameCount % 5 == 0 &&
@@ -109,8 +119,8 @@ class Player {
 				(floor(this.ontile.index / this.radius) == 0 && dir[1] < 0) ||
 				(ceil(this.ontile.index / this.radius) == this.radius && dir[1] > 0) ||
 				(this.ontile.index % this.radius == 0 && dir[0] < 0) ||
-				(this.ontile.index % this.radius == 8 && dir[0] > 0) ||
-				game.state == "started" ||
+				(this.ontile.index % this.radius == this.radius - 1 && dir[0] > 0) ||
+				!game.state == "started" ||
 				(dir[0] > 0 && (destination.collide.left || this.ontile.collide.right)) || //* right
 				(dir[0] < 0 && (destination.collide.right || this.ontile.collide.left)) || //* left
 				(dir[1] > 0 && (destination.collide.top || this.ontile.collide.bottom)) || //* bottom
@@ -153,6 +163,18 @@ class Map {
 	}
 	async generate() {
 		if (this.flattenTiles.length == 0 || game.state != "preparation") return;
+		game.state = "preparing";
+		this.tiles.forEach((e) => {
+			e.forEach((x) => {
+				x.collide = {
+					right: true,
+					left: true,
+					top: true,
+					bottom: true,
+				};
+			});
+		});
+		this.flattenTiles = _.flatten(this.tiles);
 		let getDirection = ({ r = false, l = false, t = false, b = false }) => {
 			let availableIndex = [];
 			if (!r) availableIndex.push("right");
@@ -163,37 +185,49 @@ class Map {
 		};
 		let checkPath = (tile) => {
 			return {
-				r: _.includes(_.concat(passed, generated), tile.index + 1) || current.index % this.radius == 8,
+				r: _.includes(_.concat(passed, generated), tile.index + 1) || current.index % this.radius == this.radius - 1,
 				l: _.includes(_.concat(passed, generated), tile.index - 1) || current.index % this.radius == 0,
-				b: _.includes(_.concat(passed, generated), tile.index + this.radius) || ceil(current.index / this.radius) == this.radius,
+				b: _.includes(_.concat(passed, generated), tile.index + this.radius) || ceil((current.index + 1) / this.radius) == this.radius,
 				t: _.includes(_.concat(passed, generated), tile.index - this.radius) || floor(current.index / this.radius) == 0,
 			};
 		};
+		let getRandomTile = () => {
+			if (generated.length == 0) return;
+			let picked = generated[_.random(generated.length - 1, false)];
+			let pickedTile = getTile(picked);
+			let pickedPath = checkPath(pickedTile);
+			return _.includes(pickedPath, false) ? picked : getRandomTile();
+		};
 		let getTile = (index) => this.tiles[floor(index / this.radius)][index % this.radius];
-		let passed = [];
+		let passed = [game.player.ontile.index];
 		let generated = [];
 		let generating = true;
 		let current = game.player.ontile;
 		while (generating) {
-			await new Promise((r) => setTimeout(r, 100));
-			generating = generated.length != this.flattenTiles.length;
+			generated = _.union(generated);
+			passed = _.union(passed);
+			generating = generated.length + passed.length != this.flattenTiles.length;
 			let path = checkPath(current);
 			let dir = getDirection(path);
 			let destinationTile = this.flattenTiles[current.index + (dir == "right" ? 1 : dir == "left" ? -1 : dir == "bottom" ? this.radius : dir == "top" ? -this.radius : 0)];
-			if (!_.includes(path, false)) {
-				let lastTile = passed.pop();
+			if (!_.includes(path, false) || (_.random(3, false) == 1 && generated.length + passed.length != 0)) {
+				let lastTile = passed.pop() ?? getRandomTile();
 				current = getTile(lastTile);
 				generated.push(lastTile);
-				console.log("locked up", current);
 			} else {
-				passed.push(current.index);
+				console.log("cur-" + current.index, "des-" + destinationTile.index, dir);
+				getTile(current.index).bg = true;
+				await new Promise((r) => setTimeout(r, pow(1.02, this.res * 2)));
+				passed.push(destinationTile.index);
+				getTile(current.index).bg = false;
 				getTile(current.index).collide[dir] = false;
 				getTile(destinationTile.index).collide[dir == "right" ? "left" : dir == "left" ? "right" : dir == "bottom" ? "top" : "bottom"] = false;
-				console.log(generated, passed, dir, path, destinationTile, current);
 				current = destinationTile;
 			}
 			this.flattenTiles = _.flatten(this.tiles);
 		}
+		console.log(passed, generated, sort(_.concat(passed, generated)));
+		game.state = "started";
 	}
 	render(vector) {
 		this.flattenTiles.forEach((e) => {
@@ -220,13 +254,21 @@ class Tiles {
 			top: t,
 			bottom: b,
 		};
+		this.bg = false;
 		this.center = center;
 	}
 	render(vector) {
 		let final = [(vector.x ?? 0) + this.pos.x, (vector.y ?? 0) + this.pos.y];
 		push();
-		stroke(50).noFill().strokeWeight(1).rect(final[0], final[1], this.res, this.res);
-		text(this.index, final[0] - textWidth(this.index) * 0.5, final[1] + 5);
+		stroke(20);
+		if (this.bg) {
+			fill(rgb.r, rgb.g, rgb.b);
+			rgbAnimate();
+		} else {
+			noFill();
+		}
+		strokeWeight(1).rect(final[0], final[1], this.res, this.res).fill(100);
+		// text(this.index, final[0] - textWidth(this.index) * 0.5, final[1] + 5);
 		pop();
 	}
 	renderCollision(vector) {
