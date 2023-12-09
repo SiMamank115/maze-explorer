@@ -28,7 +28,7 @@ function preload() {} //* preload
 function setup() {
 	createCanvas(500, 500); //* create the canvas
 	frameRate(60); //* set frame rate to 60FPS
-	game = new Game({ res: 48 }); //* initialize Game class in game
+	game = new Game({ random: true }); //* initialize Game class in game
 } //! setup
 
 function draw() {
@@ -36,7 +36,7 @@ function draw() {
 	renderFPS(); //* render the FPS counter
 	game.render(); //* render the game
 	if (game.state == "over" && frameCount % 60 == 0) {
-		game = new Game({ res: 48 });
+		game = new Game({ random: true });
 	}
 }
 function renderFPS() {
@@ -73,7 +73,13 @@ function keyReleased() {
 } //! key driver
 
 class Game {
-	constructor({ res = 48, radius }) {
+	constructor({ res = 48, radius, random = false }) {
+		noLoop();
+		if (random) {
+			res = _.random(24, 48);
+			radius = _.random(5, 20);
+			this.vignette = _.random() == 0;
+		}
 		this.res = res;
 		this.radius = _.isInteger(radius)
 			? abs(radius + (radius % 2 == 0 ? 1 : 0))
@@ -83,6 +89,7 @@ class Game {
 		this.cam = new Camera();
 		this.state = "preparation"; //* "preparation" "prepare" "started" "over"
 		this.difficulty = 1;
+		loop();
 	}
 	render() {
 		this.cam.render(this.player, this.map); //* render the camera
@@ -251,7 +258,7 @@ class Map {
 			} else {
 				//* generate the next tile
 				getTile(current.index).bg = true;
-				await new Promise((r) => setTimeout(r, round(1000 / (this.radius * 1.5)))); //* the pause
+				await new Promise((r) => setTimeout(r, round(100 / (this.radius * 1.5)))); //* the pause
 				passed.push(destinationTile.index);
 				getTile(current.index).bg = false;
 				getTile(current.index).collide[dir] = false;
